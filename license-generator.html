@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0b1220">
+<title>License Generator — دفتر یار معلم</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Tahoma,Arial,sans-serif;background:#0b1220;color:#eef4ff;min-height:100vh}
+.container{max-width:720px;margin:0 auto;padding:28px 18px}
+.card{background:#121b2d;border:1px solid #26344e;border-radius:20px;padding:24px;box-shadow:0 18px 50px rgba(0,0,0,.25)}
+h1{margin:0 0 8px;font-size:24px}
+.sub{color:#9eacc3;margin-bottom:24px;font-size:14px}
+label{display:block;margin:16px 0 7px;font-size:14px;color:#dce7f8}
+input{width:100%;padding:13px 14px;border-radius:12px;border:1px solid #33435f;background:#0d1626;color:#fff;font-size:15px;outline:none}
+input:focus{border-color:#4da3ff}
+.row{display:grid;grid-template-columns:1fr 160px;gap:12px}
+button{width:100%;margin-top:22px;padding:14px;border:0;border-radius:12px;background:#20a66a;color:#fff;font-size:16px;font-weight:bold;cursor:pointer}
+button:disabled{opacity:.55;cursor:not-allowed}
+.result{display:none;margin-top:22px;padding:18px;border-radius:14px;background:#0d1626;border:1px solid #29405f}
+.code{font-size:22px;letter-spacing:1px;direction:ltr;text-align:center;padding:15px;margin:12px 0;background:#101d31;border-radius:10px;color:#7ee2b8;font-weight:bold}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.actions button{margin-top:8px;background:#263a5c}
+.status{margin-top:14px;padding:12px;border-radius:10px;display:none;font-size:14px}
+.ok{background:#123d2d;color:#8ff0bd}
+.err{background:#4a1e28;color:#ffb6c0}
+.note{font-size:12px;color:#8391a8;line-height:1.8;margin-top:18px}
+@media(max-width:560px){.row{grid-template-columns:1fr}.actions{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <h1>🔑 License Generator</h1>
+    <div class="sub">مدیریت لایسنس «دفتر یار معلم»</div>
+
+    <label>نام مشتری</label>
+    <input id="customer" placeholder="مثلاً: علی رضایی">
+
+    <div class="row">
+      <div>
+        <label>شناسه / شماره سفارش</label>
+        <input id="order" placeholder="مثلاً: 1025">
+      </div>
+      <div>
+        <label>تعداد دستگاه</label>
+        <input id="maxDevices" type="number" min="1" max="10" value="3">
+      </div>
+    </div>
+
+    <label>Admin Token</label>
+    <input id="adminToken" type="password" placeholder="توکن مدیریتی Worker">
+
+    <button id="createBtn">ساخت License</button>
+
+    <div id="status" class="status"></div>
+
+    <div id="result" class="result">
+      <div>License ساخته شد:</div>
+      <div id="licenseCode" class="code"></div>
+      <div class="actions">
+        <button id="copyBtn">📋 کپی کد</button>
+        <button id="copyMessageBtn">💬 کپی پیام مشتری</button>
+      </div>
+      <div class="note">
+        این کد را برای مشتری ارسال کنید. محدودیت تعداد دستگاه در سمت سرور اعمال می‌شود.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = "https://daftaryar-license.get-aihubtools.workers.dev";
+
+const $ = id => document.getElementById(id);
+
+function showStatus(message, type){
+  const el = $("status");
+  el.textContent = message;
+  el.className = "status " + type;
+  el.style.display = "block";
+}
+
+$("createBtn").addEventListener("click", async () => {
+  const customer = $("customer").value.trim();
+  const order = $("order").value.trim();
+  const maxDevices = Number($("maxDevices").value);
+  const adminToken = $("adminToken").value.trim();
+
+  if(!customer) return showStatus("نام مشتری را وارد کنید.", "err");
+  if(!adminToken) return showStatus("Admin Token را وارد کنید.", "err");
+  if(!Number.isInteger(maxDevices) || maxDevices < 1) {
+    return showStatus("تعداد دستگاه نامعتبر است.", "err");
+  }
+
+  $("createBtn").disabled = true;
+  showStatus("در حال ساخت License...", "ok");
+
+  try{
+    const res = await fetch(API, {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "Authorization":"Bearer " + adminToken
+      },
+      body:JSON.stringify({
+        action:"create",
+        customer,
+        order,
+        maxDevices
+      })
+    });
+
+    const data = await res.json();
+
+    if(!data.success){
+      throw new Error(data.message || "ساخت License ناموفق بود.");
+    }
+
+    $("licenseCode").textContent = data.code;
+    $("result").style.display = "block";
+    showStatus("License با موفقیت ساخته شد.", "ok");
+
+    $("copyBtn").onclick = async () => {
+      await navigator.clipboard.writeText(data.code);
+      showStatus("کد کپی شد.", "ok");
+    };
+
+    $("copyMessageBtn").onclick = async () => {
+      const message =
+`سلام
+کد فعال‌سازی «دفتر یار معلم» شما:
+
+${data.code}
+
+این کد برای ${maxDevices} دستگاه قابل استفاده است.`;
+      await navigator.clipboard.writeText(message);
+      showStatus("پیام آماده ارسال کپی شد.", "ok");
+    };
+
+  }catch(err){
+    showStatus(err.message || "خطا در ارتباط با سرور.", "err");
+  }finally{
+    $("createBtn").disabled = false;
+  }
+});
+</script>
+</body>
+</html>
